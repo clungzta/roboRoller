@@ -1,5 +1,6 @@
 import time
 import math
+import numpy as np
 from pprint import pprint, pformat
 
 def clamp(minimum, x, maximum):
@@ -27,10 +28,10 @@ class RobotDiffDriveController:
 
         # P-controller settings
         self.kP_lin = kwargs.get('kP_lin', 0.05)
-        self.kP_ang = kwargs.get('kP_ang', 0.01)
+        self.kP_ang = kwargs.get('kP_ang', 0.05)
 
         # Velocity Constraints
-        self.max_lin_vel = kwargs.get('max_lin_vel', 1.0)
+        self.max_lin_vel = kwargs.get('max_lin_vel', 0.6)
         self.max_ang_vel = kwargs.get('max_ang_vel', 0.0)
         
         self.max_driver_power = kwargs.get('max_driver_power', 1.0)
@@ -76,7 +77,8 @@ class RobotDiffDriveController:
         delta_heading = shortest_angular_difference(self.current_heading, heading_to_target_deg)
 
         if self.verbose:
-            print('Robot target position set to: ({:.2f}, {:.2f}). Robot has to travel {:.2f} metres, turning {:.2f} degrees'.format(x_desired, y_desired, dist_to_target, delta_heading))
+            print('Robot target position set to: ({:.2f}, {:.2f}). Robot has to travel {:.2f} metres at a heading of {:.2f} degrees, turning {:.2f} degrees'.format(
+                x_desired, y_desired, dist_to_target, heading_to_target_deg, delta_heading))
         
         # Convert heading difference back to radians
         desired_heading_rad = delta_heading * (math.pi / 180.0)
@@ -92,17 +94,33 @@ class RobotDiffDriveController:
         angular_velocity = clamp(-self.max_ang_vel, angular_velocity, self.max_ang_vel)
 
         # Calculate the motor speeds
+        left_speed, right_speed = 0.0, 0.0
         if dist_to_target > self.reached_target_threshold:
-            left_speed = linear_velocity - angular_velocity
-            right_speed = linear_velocity + angular_velocity
+
+            # vel_arr consists of [Left Speed Un-normalised,  Right Speed Un-normalised]
+            vel_arr = np.asarray([linear_velocity - angular_velocity, linear_velocity + angular_velocity])
+            left_speed, right_speed = vel_arr
+
+            # # Normalise: compute the velocity direction unit-vector
+            # vel_dir_vec = vel_arr / np.linalg.norm(vel_arr)
+            # print(vel_dir_vec)
+
+            # Multiply the unit-vector by the robot max velocity to get the actual motor speeds
+            # left_speed, right_speed = vel_dir_vec * self.max_driver_power
+
             print('Unconstrained speeds: ({:.2f}, {:.2f})'.format(left_speed, right_speed))
         else:
             left_speed, right_speed = 0.0, 0.0
             print('REACHED TARGET!')
 
-        # Limit the motor speeds to what the driver can handle
-        left_speed = clamp(-self.max_driver_power, left_speed, self.max_driver_power)
-        right_speed = clamp(-self.max_driver_power, right_speed, self.max_driver_power)
+        # Limit the motor speeds to the maximum the robot should go
+        # Prevent it from moving any wheel backwards
+        # left_speed = clamp(-self.max_driver_power, left_speed, self.max_driver_power)
+        # right_speed = clamp(-self.max_driver_power, right_speed, self.max_driver_power)
+
+        # Prevent it from moving any wheel backwards
+        left_speed = clamp(0.0, left_speed, self.max_driver_power)
+        right_speed = clamp(0.0, right_speed, self.max_driver_power)
 
         # Cut power if below threshold
         # This avoids motor windings burning out

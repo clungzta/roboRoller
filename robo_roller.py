@@ -22,9 +22,9 @@ DRIVE = True
 
 robot_controller_settings = {
     'kP_lin' : 1.0,
-    'kP_ang': 0.0025,
-    'max_lin_vel' : 1.0,
-    'max_ang_vel' : 0.6,
+    'kP_ang': 0.006,
+    'max_lin_vel' : 0.7,
+    'max_ang_vel' : 0.15,
     'max_driver_power': 0.65,
     'min_driver_power': 0.3,
     'reached_target_threshold': 1.2,
@@ -86,9 +86,14 @@ if not TB.foundChip:
         print('TB.i2cAddress = 0x%02X' % (boards[0]))
     sys.exit()
 
-pozyx_heading_ewma_alpha = 0.1
+pozyx_heading_ewma_alpha = 0.7
 # filtered_heading = None
 filtered_heading = -90.0
+
+# TB.SetMotor1(1.0)
+# TB.SetMotor2(0.0)
+# time.sleep(1)
+# exit()
 
 print('Press CTRL+C to finish')
 try:
@@ -128,7 +133,7 @@ try:
             robot_velocity = measured_d / dt
 
             # Ensure that we are moving before trying to capture a heading...
-            if robot_velocity > 0.075:
+            if robot_velocity > 0.025: # 0.075
                 if filtered_heading is None:
                     filtered_heading = pozyx_heading 
                 else:
@@ -164,8 +169,9 @@ try:
             left_speed, right_speed = robot_controller.get_wheel_velocities(target_x, target_y)
             
             if DRIVE:
-                TB.SetMotor1(left_speed)
-                TB.SetMotor2(right_speed)
+                # TB wired backwards, i.e. motor1 is right, motor2 is left...
+                TB.SetMotor1(right_speed)
+                TB.SetMotor2(left_speed)
         
         except Exception as e:
             print(e)
