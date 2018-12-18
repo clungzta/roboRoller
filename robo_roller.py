@@ -20,6 +20,9 @@ port = 1883
 POSE_UNCERTAINTY_THRESH = 10
 DRIVE = True
 
+# This will be updated when readings come in from the IMU and Pozyx
+imu_pozyx_heading_offset = 0.0
+
 robot_controller_settings = {
     'kP_lin' : 1.0,
     'kP_ang': 0.006,
@@ -28,7 +31,7 @@ robot_controller_settings = {
     'max_driver_power': 0.65,
     'min_driver_power': 0.3,
     'reached_target_threshold': 1.2,
-    'verbose' : True
+    'verbose' : False
 }
 
 robot_controller = RobotDiffDriveController(**robot_controller_settings)
@@ -56,6 +59,12 @@ def on_message(client, userdata, msg):
 def on_subscribe(client, userdata, mid, granted_qos):
     print("Subscribed to topic!")
     print(userdata)
+
+def constrainAngle(x):
+    x = (x + 180) % 360
+    if (x < 0):
+        x += 360
+    return x - 180
 
 imu_topic = 'imu/{}'.format(get_mac())
 
@@ -119,8 +128,6 @@ try:
             TB.SetMotor2(0.0)
             continue
 
-        pozyx_readings[-1]
-
         if 'coordinates' in pozyx_readings[-1]['data'] and 'coordinates' in pozyx_readings[-2]['data']:
             prev_coords = pozyx_readings[-2]['data']['coordinates']
             coords = pozyx_readings[-1]['data']['coordinates']
@@ -131,15 +138,24 @@ try:
             dt = pozyx_readings[-1]['timestamp'] - pozyx_readings[-2]['timestamp']
             pozyx_heading = math.atan2(measured_dy, measured_dx) * (180.0 / math.pi)
             robot_velocity = measured_d / dt
+            x, y, z = imu_readings[-1]
+
+            # Convert imu heading from IMU space to Pozyx space...
+            imu_heading = -constrainAngle(z + 180) + imu_pozyx_heading_offset
 
             # Ensure that we are moving before trying to capture a heading...
             if robot_velocity > 0.025: # 0.075
                 if filtered_heading is None:
-                    filtered_heading = pozyx_heading 
+                    filtered_heading = imu_heading
+                    # filtered_heading = pozyx_heading
                 else:
                     filtered_heading = pozyx_heading_ewma_alpha * pozyx_heading + (1.0 - pozyx_heading_ewma_alpha) * filtered_heading
                 
-                print('Pozyx heading: {:.4f}, robot_velocity: {:.4f}'.format(pozyx_heading, robot_velocity))
+                if robot_controller.verbose:
+                    print('Pozyx heading: {:.4f}, robot_velocity: {:.4f}'.format(pozyx_heading, robot_velocity))
+
+
+                # print()
 
         # pprint(latest_pozyx_reading)
         # uncertainty = latest_pozyx_reading['data']['metrics']['reliability']['uncertainty']
@@ -176,8 +192,9 @@ try:
         except Exception as e:
             print(e)
 
-        print('Motor speeds - Left: {:.4f}, Right: {:.4f}'.format(left_speed, right_speed))
-        time.sleep(0.1)                   # Wait between steps
+        if robot_controller.verbose:
+            print('Motor speeds - Left: {:.4f}, Right: {:.4f}'.format(left_speed, right_speed))
+        time.sleep(0.001)                   # Wait between steps
 
 except KeyboardInterrupt:
     # User has pressed CTRL+C

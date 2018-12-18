@@ -108,10 +108,12 @@ class RobotDiffDriveController:
             # Multiply the unit-vector by the robot max velocity to get the actual motor speeds
             # left_speed, right_speed = vel_dir_vec * self.max_driver_power
 
-            print('Unconstrained speeds: ({:.2f}, {:.2f})'.format(left_speed, right_speed))
+            if self.verbose:
+                print('Unconstrained speeds: ({:.2f}, {:.2f})'.format(left_speed, right_speed))
         else:
             left_speed, right_speed = 0.0, 0.0
-            print('REACHED TARGET!')
+            if self.verbose:
+                print('REACHED TARGET!')
 
         # Limit the motor speeds to the maximum the robot should go
         # Prevent it from moving any wheel backwards
